@@ -84,11 +84,16 @@ FORMAT:
 @st.cache_resource
 def get_client():
     # Temporary debug — remove after fixing
-    st.write("Available secrets:", list(st.secrets.keys()))
-    return anthropic.Anthropic(
-        api_key=st.secrets["ANTHROPIC_API_KEY"]
-    )
-
+    try:
+        all_keys = list(st.secrets.keys())
+        st.sidebar.write("Secret keys found:", all_keys)
+        api_key = st.secrets["ANTHROPIC_API_KEY"]
+        st.sidebar.write("Key loaded successfully")
+        return anthropic.Anthropic(api_key=api_key)
+    except Exception as e:
+        st.sidebar.write("Error:", str(e))
+        st.stop()
+        
 # ── Session State Initialization ────────────────────────────
 def initialize_session():
     """
