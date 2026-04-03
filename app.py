@@ -8,6 +8,119 @@ st.set_page_config(
     layout="centered"
 )
 
+# ── Custom CSS ───────────────────────────────────────────────
+st.markdown("""
+<style>
+    /* Hide Streamlit's default header and footer */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Remove default top padding */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        max-width: 700px;
+    }
+
+    /* Chat widget wrapper */
+    .chat-widget {
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #ffffff;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        margin-bottom: 1rem;
+    }
+
+    /* Widget header */
+    .chat-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #ffffff;
+    }
+
+    .sara-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: #EEEDFE;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        font-weight: 600;
+        color: #534AB7;
+    }
+
+    /* Chat bubbles */
+    .bubble-sara {
+        background: #f4f4f5;
+        border-radius: 16px 16px 16px 4px;
+        padding: 10px 14px;
+        max-width: 75%;
+        font-size: 14px;
+        line-height: 1.55;
+        color: #1a1a1a;
+        margin: 4px 0;
+    }
+
+    .bubble-user {
+        background: #534AB7;
+        border-radius: 16px 16px 4px 16px;
+        padding: 10px 14px;
+        max-width: 75%;
+        font-size: 14px;
+        line-height: 1.55;
+        color: #ffffff;
+        margin: 4px 0;
+        margin-left: auto;
+    }
+
+    .message-row {
+        display: flex;
+        margin-bottom: 8px;
+    }
+
+    .message-row.user {
+        justify-content: flex-end;
+    }
+
+    .message-row.sara {
+        justify-content: flex-start;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .mini-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #EEEDFE;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: #534AB7;
+        flex-shrink: 0;
+    }
+
+    /* Fix Streamlit chat input to look like the widget */
+    .stChatInput {
+        border-radius: 24px !important;
+    }
+
+    .stChatInput > div {
+        border-radius: 24px !important;
+        border: 1px solid #e5e7eb !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ── Constants ───────────────────────────────────────────────
 MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 300
@@ -83,25 +196,14 @@ FORMAT:
 # ── Initialize Anthropic Client ─────────────────────────────
 @st.cache_resource
 def get_client():
-    # Temporary debug — remove after fixing
     try:
-        all_keys = list(st.secrets.keys())
-        st.sidebar.write("Secret keys found:", all_keys)
-        api_key = st.secrets["ANTHROPIC_API_KEY"]
-        st.sidebar.write("Key loaded successfully")
-        return anthropic.Anthropic(api_key=api_key)
+        return anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
     except Exception as e:
-        st.sidebar.write("Error:", str(e))
+        st.error("API key not found. Check Streamlit secrets.")
         st.stop()
-        
+
 # ── Session State Initialization ────────────────────────────
 def initialize_session():
-    """
-    Streamlit reruns the entire script on every
-    interaction. st.session_state persists data
-    across those reruns — this is how memory works
-    in a Streamlit app.
-    """
     if "conversation_history" not in st.session_state:
         st.session_state.conversation_history = []
     if "sara_introduced" not in st.session_state:
@@ -109,24 +211,15 @@ def initialize_session():
 
 # ── Core Chat Function ───────────────────────────────────────
 def chat(user_input):
-    """
-    Same core logic as your Colab version.
-    Only difference — history lives in
-    st.session_state instead of a global variable.
-    This is the production pattern for web apps.
-    """
     client = get_client()
 
-    # Add user message to history
     st.session_state.conversation_history.append({
         "role": "user",
         "content": user_input
     })
 
-    # Get trimmed history — token cost control
     trimmed = st.session_state.conversation_history[-HISTORY_LIMIT:]
 
-    # Call Claude
     response = client.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
@@ -134,7 +227,6 @@ def chat(user_input):
         messages=trimmed
     )
 
-    # Extract and store Sara's reply
     sara_reply = response.content[0].text
     st.session_state.conversation_history.append({
         "role": "assistant",
@@ -143,55 +235,79 @@ def chat(user_input):
 
     return sara_reply
 
+# ── Render a single message bubble ──────────────────────────
+def render_message(role, content):
+    if role == "user":
+        st.markdown(f"""
+        <div class="message-row user">
+            <div class="bubble-user">{content}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div class="message-row sara">
+            <div class="mini-avatar">S</div>
+            <div class="bubble-sara">{content}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
 # ── UI Rendering ─────────────────────────────────────────────
 def render_chat_interface():
-    """
-    Renders the entire chat UI.
-    Separated from logic — this is the
-    separation of concerns principle in practice.
-    """
-    st.title("💬 ABC Coaching Assistant")
-    st.caption("Hi! I'm Sara. Ask me anything about our programs.")
 
-    # Render conversation history
-    for message in st.session_state.conversation_history:
-        if message["role"] == "user":
-            with st.chat_message("user"):
-                st.write(message["content"])
-        else:
-            with st.chat_message("assistant", avatar="💬"):
-                st.write(message["content"])
+    # Widget header
+    st.markdown("""
+    <div style="border: 1px solid #e5e7eb; border-radius: 16px 16px 0 0;
+                padding: 14px 18px; background: #fff;
+                display: flex; align-items: center; gap: 10px;
+                border-bottom: 1px solid #f0f0f0;">
+        <div style="width:38px; height:38px; border-radius:50%;
+                    background:#EEEDFE; display:flex; align-items:center;
+                    justify-content:center; font-size:15px; font-weight:600;
+                    color:#534AB7;">S</div>
+        <div>
+            <p style="margin:0; font-size:14px; font-weight:600;
+                      color:#1a1a1a;">Sara</p>
+            <p style="margin:0; font-size:12px; color:#6b7280;">
+                ABC Coaching Assistant</p>
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:center;
+                    gap:6px; font-size:12px; color:#6b7280;">
+            <div style="width:8px; height:8px; border-radius:50%;
+                        background:#1D9E75;"></div>
+            Online
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Message area
+    st.markdown('<div style="padding: 16px 18px 8px;">', unsafe_allow_html=True)
 
     # Opening message — shown only once
     if not st.session_state.sara_introduced:
-        with st.chat_message("assistant", avatar="💬"):
-            opening = (
-                "Hi there! I'm Sara, your guide at ABC Coaching. "
-                "Whether you're curious about our program or just "
-                "exploring — I'm here to help. What's on your mind?"
-            )
-            st.write(opening)
+        render_message("assistant",
+            "Hi there! I'm Sara, your guide at ABC Coaching. "
+            "Whether you're curious about our program or just "
+            "exploring — I'm here to help. What's on your mind?"
+        )
         st.session_state.sara_introduced = True
+
+    # Render full conversation history
+    for message in st.session_state.conversation_history:
+        render_message(message["role"], message["content"])
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Input Handler ────────────────────────────────────────────
 def handle_input():
-    """
-    Handles user input from the chat box.
-    st.chat_input stays fixed at bottom of page
-    — standard chat UI pattern.
-    """
-    user_input = st.chat_input("Type your message here...")
+    user_input = st.chat_input("Message Sara...")
 
     if user_input:
-        # Show user message immediately
-        with st.chat_message("user"):
-            st.write(user_input)
+        render_message("user", user_input)
 
-        # Get and show Sara's reply
-        with st.chat_message("assistant", avatar="💬"):
-            with st.spinner("Sara is typing..."):
-                reply = chat(user_input)
-            st.write(reply)
+        with st.spinner(""):
+            reply = chat(user_input)
+
+        render_message("assistant", reply)
 
 # ── Main ─────────────────────────────────────────────────────
 def main():
