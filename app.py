@@ -83,11 +83,8 @@ FORMAT:
 # ── Initialize Anthropic Client ─────────────────────────────
 @st.cache_resource
 def get_client():
-    """
-    Create Anthropic client once and reuse it.
-    st.cache_resource means this runs only once
-    per session — not on every message.
-    """
+    # Temporary debug — remove after fixing
+    st.write("Available secrets:", list(st.secrets.keys()))
     return anthropic.Anthropic(
         api_key=st.secrets["ANTHROPIC_API_KEY"]
     )
