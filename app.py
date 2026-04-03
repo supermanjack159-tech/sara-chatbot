@@ -1,16 +1,19 @@
 import streamlit as st
 import anthropic
 
+# ── Page Configuration ──────────────────────────────────────
 st.set_page_config(
-  page_title="ABC Coaching Assistant",
-  page_icon="💬",
-  layout="centered"
+    page_title="ABC Coaching Assistant",
+    page_icon="💬",
+    layout="centered"
 )
 
+# ── Constants ───────────────────────────────────────────────
 MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 300
 HISTORY_LIMIT = 6
 
+# ── System Prompt ───────────────────────────────────────────
 SARA_SYSTEM_PROMPT = """
 ROLE & IDENTITY:
 You are Sara, a friendly, professional AI Chat Assistant
@@ -39,8 +42,8 @@ KNOWLEDGE:
 - Discovery call: 30 minutes, free, no obligation
 - Email: test@gmail.com
 - Phone: 9998882222 (available after 5 PM)
-- Booking link: https://scheduler.zoom.us
-- LinkedIn: https://www.linkedin.com/
+- Booking link: [INSERT CALENDLY LINK]
+- LinkedIn: [INSERT COACH LINKEDIN URL]
 
 BOUNDARY RULES:
 - Never confirm, deny, or speculate about discounts or
@@ -77,3 +80,122 @@ FORMAT:
 - Short sentences, conversational feel
 """
 
+# ── Initialize Anthropic Client ─────────────────────────────
+@st.cache_resource
+def get_client():
+    """
+    Create Anthropic client once and reuse it.
+    st.cache_resource means this runs only once
+    per session — not on every message.
+    """
+    return anthropic.Anthropic(
+        api_key=st.secrets["ANTHROPIC_API_KEY"]
+    )
+
+# ── Session State Initialization ────────────────────────────
+def initialize_session():
+    """
+    Streamlit reruns the entire script on every
+    interaction. st.session_state persists data
+    across those reruns — this is how memory works
+    in a Streamlit app.
+    """
+    if "conversation_history" not in st.session_state:
+        st.session_state.conversation_history = []
+    if "sara_introduced" not in st.session_state:
+        st.session_state.sara_introduced = False
+
+# ── Core Chat Function ───────────────────────────────────────
+def chat(user_input):
+    """
+    Same core logic as your Colab version.
+    Only difference — history lives in
+    st.session_state instead of a global variable.
+    This is the production pattern for web apps.
+    """
+    client = get_client()
+
+    # Add user message to history
+    st.session_state.conversation_history.append({
+        "role": "user",
+        "content": user_input
+    })
+
+    # Get trimmed history — token cost control
+    trimmed = st.session_state.conversation_history[-HISTORY_LIMIT:]
+
+    # Call Claude
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        system=SARA_SYSTEM_PROMPT,
+        messages=trimmed
+    )
+
+    # Extract and store Sara's reply
+    sara_reply = response.content[0].text
+    st.session_state.conversation_history.append({
+        "role": "assistant",
+        "content": sara_reply
+    })
+
+    return sara_reply
+
+# ── UI Rendering ─────────────────────────────────────────────
+def render_chat_interface():
+    """
+    Renders the entire chat UI.
+    Separated from logic — this is the
+    separation of concerns principle in practice.
+    """
+    st.title("💬 ABC Coaching Assistant")
+    st.caption("Hi! I'm Sara. Ask me anything about our programs.")
+
+    # Render conversation history
+    for message in st.session_state.conversation_history:
+        if message["role"] == "user":
+            with st.chat_message("user"):
+                st.write(message["content"])
+        else:
+            with st.chat_message("assistant", avatar="💬"):
+                st.write(message["content"])
+
+    # Opening message — shown only once
+    if not st.session_state.sara_introduced:
+        with st.chat_message("assistant", avatar="💬"):
+            opening = (
+                "Hi there! I'm Sara, your guide at ABC Coaching. "
+                "Whether you're curious about our program or just "
+                "exploring — I'm here to help. What's on your mind?"
+            )
+            st.write(opening)
+        st.session_state.sara_introduced = True
+
+# ── Input Handler ────────────────────────────────────────────
+def handle_input():
+    """
+    Handles user input from the chat box.
+    st.chat_input stays fixed at bottom of page
+    — standard chat UI pattern.
+    """
+    user_input = st.chat_input("Type your message here...")
+
+    if user_input:
+        # Show user message immediately
+        with st.chat_message("user"):
+            st.write(user_input)
+
+        # Get and show Sara's reply
+        with st.chat_message("assistant", avatar="💬"):
+            with st.spinner("Sara is typing..."):
+                reply = chat(user_input)
+            st.write(reply)
+
+# ── Main ─────────────────────────────────────────────────────
+def main():
+    initialize_session()
+    render_chat_interface()
+    handle_input()
+
+if __name__ == "__main__":
+    main()
